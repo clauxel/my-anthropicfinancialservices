@@ -1,0 +1,35 @@
+name = "my-anthropicfinancialservices"
+main = "worker/index.js"
+compatibility_date = "2026-05-07"
+workers_dev = true
+routes = [
+  { pattern = "anthropicfinancial.space/*", zone_name = "anthropicfinancial.space" },
+  { pattern = "www.anthropicfinancial.space/*", zone_name = "anthropicfinancial.space" }
+]
+
+[vars]
+CREEM_API_BASE = "https://api.creem.io"
+CREEM_ENV = "live"
+
+[assets]
+directory = "./dist"
+binding = "SITE_ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = [
+  "/",
+  "/anthropic-financial-services-github-project-explained",
+  "/anthropic-financial-services-github",
+  "/anthropic-ai-agents-financial-services",
+  "/anthropic-financial-services-plugin",
+  "/anthropic-financial-services-event",
+  "/anthropic-financial-services-jobs",
+  "/claude-for-financial-services-demo",
+  "/claude-for-financial-services-review",
+  "/anthropic-claude-financial",
+  "/pricing",
+  "/privacy",
+  "/terms",
+  "/sitemap.xml",
+  "/robots.txt",
+  "/api/*"
+]

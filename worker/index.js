@@ -1,3 +1,6 @@
+import { handleAnalyticsRequest } from './analytics.js'
+import { handleNowPaymentsCheckout } from './nowpayments.js'
+
 const LIVE_ORIGIN = 'https://anthropicfinancial.space'
 const LIVE_HOST = 'anthropicfinancial.space'
 const ALT_HOSTS = new Set(['www.anthropicfinancial.space'])
@@ -89,10 +92,13 @@ function handleOptions(request) {
 }
 
 function maybeRedirectToHttps(requestUrl) {
-  if (requestUrl.protocol !== 'https:') {
-    const redirectUrl = new URL(requestUrl)
-    redirectUrl.protocol = 'https:'
-    return Response.redirect(redirectUrl.toString(), 308)
+  if (requestUrl.hostname === LIVE_HOST || ALT_HOSTS.has(requestUrl.hostname)) {
+    if (requestUrl.protocol !== 'https:' || requestUrl.hostname !== LIVE_HOST) {
+      const redirectUrl = new URL(requestUrl)
+      redirectUrl.protocol = 'https:'
+      redirectUrl.hostname = LIVE_HOST
+      return Response.redirect(redirectUrl.toString(), 301)
+    }
   }
   return null
 }
@@ -316,21 +322,8 @@ function handleCatalog(request) {
   )
 }
 
-async function handleAnalytics(request) {
-  if (request.method !== 'POST') {
-    return jsonResponse({ ok: false, error: 'Method not allowed.' }, 405, request)
-  }
-
-  let body
-  try {
-    body = await request.json()
-  } catch {
-    return jsonResponse({ ok: false, error: 'Invalid JSON body.' }, 400, request)
-  }
-
-  const events = Array.isArray(body?.events) ? body.events.slice(0, 40) : []
-  console.log(JSON.stringify({ type: 'analytics', site: 'anthropicfinancial.space', accepted: events.length, events }))
-  return jsonResponse({ ok: true, accepted: events.length, persisted: true }, 202, request)
+async function handleAnalytics(request, env) {
+  return handleAnalyticsRequest(request, env, { siteKey: 'anthropicfinancialservices' })
 }
 
 function buildSitemapXml() {
@@ -374,6 +367,14 @@ Sitemap: ${LIVE_ORIGIN}/sitemap.xml
   return new Response(body, { status: 200, headers })
 }
 
+function noIndexNotFoundResponse(request) {
+  const headers = securityHeaders(request)
+  headers.set('Content-Type', 'text/html; charset=utf-8')
+  headers.set('Cache-Control', 'no-store')
+  headers.set('X-Robots-Tag', 'noindex, nofollow')
+  return new Response('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Page not found</title></head><body><main><h1>Page not found</h1><p>This URL is not a public page for this product.</p></main></body></html>', { status: 404, headers })
+}
+
 async function fetchAsset(request, env) {
   if (env?.SITE_ASSETS?.fetch) {
     const requestUrl = new URL(request.url)
@@ -399,10 +400,22 @@ export async function handleRequest(request, env) {
   const requestUrl = new URL(request.url)
 
   if (request.method === 'OPTIONS') return handleOptions(request)
+  if (requestUrl.pathname === '/api/nowpayments-checkout') {
+    return handleNowPaymentsCheckout(request, env, {
+      plans: planCatalog,
+      defaultPlanId: 'analyst',
+      siteName: 'anthropicfinancialservices',
+      siteKey: 'anthropicfinancialservices',
+      annualDiscountMultiplier: typeof ANNUAL_DISCOUNT_MULTIPLIER !== 'undefined'
+        ? ANNUAL_DISCOUNT_MULTIPLIER
+        : (typeof annualBillingMultiplier !== 'undefined' ? annualBillingMultiplier : 0.5),
+    })
+  }
+
   if (requestUrl.pathname === '/api/runtime') return handleRuntime(request, requestUrl)
   if (requestUrl.pathname === '/api/catalog') return handleCatalog(request)
   if (requestUrl.pathname === '/api/checkout') return handleCheckout(request, env, requestUrl)
-  if (requestUrl.pathname === '/api/analytics/events') return handleAnalytics(request)
+  if (requestUrl.pathname === '/api/analytics/events') return handleAnalytics(request, env)
 
   const redirect = maybeRedirectToHttps(requestUrl)
   if (redirect) return redirect
